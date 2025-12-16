@@ -1,0 +1,54 @@
+[package]
+name = "pg-rusty-proxy"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "pg-proxy"
+path = "src/main.rs"
+
+[dependencies]
+# Workspace dependencies
+pg-rusty-proxy-shared = { path = "../shared" }
+
+# Async runtime
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+
+# Tracing
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+bincode = { workspace = true }
+
+# Database
+rocksdb = { workspace = true }
+tokio-rusqlite = { workspace = true }
+rusqlite = { workspace = true }
+
+# PostgreSQL protocol
+tokio-postgres = { workspace = true }
+postgres-protocol = { workspace = true }
+postgres-types = { workspace = true }
+fallible-iterator = { workspace = true }
+
+# Networking
+bytes = { workspace = true }
+
+# CLI
+clap = { workspace = true }
+
+# Utilities
+uuid = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Concurrency
+parking_lot = { workspace = true }
+crossbeam = { workspace = true }
