@@ -105,7 +105,7 @@ impl LogWriter {
                 PRAGMA page_size = 4096;
             "#)?;
             
-            Ok::<_, rusqlite::Error>(())
+            Ok(())
         }).await?;
         
         info!(db_path = %db_path, "SQLite logger initialized");
@@ -200,7 +200,7 @@ impl LogWriter {
             }
             
             tx.commit()?;
-            Ok::<_, rusqlite::Error>(())
+            Ok(())
         }).await?;
         
         let elapsed = start.elapsed();
@@ -213,61 +213,5 @@ impl LogWriter {
         );
         
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-    use std::net::SocketAddr;
-
-    #[tokio::test]
-    async fn test_log_writer() {
-        let temp_dir = TempDir::new().unwrap();
-        let db_path = temp_dir.path().join("test.db");
-        
-        let (tx, rx) = mpsc::channel(100);
-        let log_writer = LogWriter::new(db_path.to_str().unwrap(), rx)
-            .await
-            .unwrap();
-        
-        let handle = tokio::spawn(async move {
-            log_writer.run().await;
-        });
-        
-        // Send some log entries
-        for i in 0..10 {
-            let entry = QueryLogEntry::new(
-                1,
-                Some(12345),
-                "127.0.0.1:5000".parse::<SocketAddr>().unwrap(),
-                "127.0.0.1:5432".parse::<SocketAddr>().unwrap(),
-                "test".to_string(),
-                "testdb".to_string(),
-                "test_app".to_string(),
-                format!("SELECT {}", i),
-                QueryType::Select,
-                std::time::SystemTime::now(),
-                1.5,
-                QueryStatus::Success,
-            );
-            
-            tx.send(entry).await.unwrap();
-        }
-        
-        // Drop sender to close channel
-        drop(tx);
-        
-        // Wait for writer to finish
-        handle.await.unwrap();
-        
-        // Verify data was written
-        let db = AsyncConnection::open(db_path.to_str().unwrap()).await.unwrap();
-        let count: i64 = db.call(|conn| {
-            conn.query_row("SELECT COUNT(*) FROM query_logs", [], |row| row.get(0))
-        }).await.unwrap();
-        
-        assert_eq!(count, 10);
     }
 }

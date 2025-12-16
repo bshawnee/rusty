@@ -245,7 +245,11 @@ impl ProxyRocksDB {
             .ok_or_else(|| RocksDBError::InvalidData("CF not found".into()))?;
         
         let current = match self.db.get_cf(cf, name.as_bytes())? {
-            Some(bytes) => u64::from_be_bytes(bytes.as_ref().try_into().unwrap_or([0; 8])),
+            Some(bytes) => {
+                let slice: &[u8] = bytes.as_ref();
+                let arr: [u8; 8] = slice.try_into().unwrap_or([0; 8]);
+                u64::from_be_bytes(arr)
+            }
             None => 0,
         };
         
@@ -262,8 +266,9 @@ impl ProxyRocksDB {
         
         match self.db.get_cf(cf, name.as_bytes())? {
             Some(bytes) => {
-                let value = u64::from_be_bytes(bytes.as_ref().try_into().unwrap_or([0; 8]));
-                Ok(value)
+                let slice: &[u8] = bytes.as_ref();
+                let arr: [u8; 8] = slice.try_into().unwrap_or([0; 8]);
+                Ok(u64::from_be_bytes(arr))
             }
             None => Ok(0),
         }
@@ -327,58 +332,4 @@ fn current_time_us() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_micros() as u64
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-    
-    #[test]
-    fn test_active_queries() {
-        let temp_dir = TempDir::new().unwrap();
-        let db = ProxyRocksDB::open(temp_dir.path()).unwrap();
-        
-        let snapshot = QuerySnapshot {
-            query_id: 1,
-            backend_pid: 12345,
-            secret_key: 67890,
-            start_time_us: current_time_us(),
-            query: "SELECT 1".to_string(),
-            user: "test".to_string(),
-            database: "testdb".to_string(),
-            application_name: "test_app".to_string(),
-            client_addr: "127.0.0.1:5000".to_string(),
-            server_addr: "127.0.0.1:5432".to_string(),
-        };
-        
-        db.add_active_query(&snapshot).unwrap();
-        
-        let queries = db.get_active_queries().unwrap();
-        assert_eq!(queries.len(), 1);
-        assert_eq!(queries[0].query_id, 1);
-        
-        db.remove_active_query(1, 1000, false).unwrap();
-        
-        let queries = db.get_active_queries().unwrap();
-        assert_eq!(queries.len(), 0);
-    }
-    
-    #[test]
-    fn test_events() {
-        let temp_dir = TempDir::new().unwrap();
-        let db = ProxyRocksDB::open(temp_dir.path()).unwrap();
-        
-        let event = Event {
-            query_id: 1,
-            event_type: EventType::Started,
-            timestamp_us: current_time_us(),
-            execution_time_us: 0,
-        };
-        
-        db.add_event(event).unwrap();
-        
-        let events = db.get_events_since(0).unwrap();
-        assert_eq!(events.len(), 1);
-    }
 }

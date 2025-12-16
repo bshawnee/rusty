@@ -41,8 +41,7 @@ pub async fn get_query_history(
     
     let sqlite = state.sqlite.clone();
     
-    let items = tokio::task::spawn_blocking(move || {
-        sqlite.call(move |conn| {
+    let items = sqlite.call(move |conn| {
             let mut sql = String::from(r#"
                 SELECT 
                     query_id,
@@ -125,19 +124,14 @@ pub async fn get_query_history(
                 items.push(row?);
             }
             
-            Ok::<_, rusqlite::Error>(items)
+            Ok(items)
         })
-    })
     .await
-    .map_err(|e| {
-        error!(error = %e, "Failed to spawn blocking task");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?
-    .map_err(|e| {
-        error!(error = %e, "Failed to get query history");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-    
+        .map_err(|e| {
+            error!(error = %e, "Failed to get query history");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
     Ok(Json(items))
 }
 
@@ -147,8 +141,7 @@ pub async fn get_query_detail(
 ) -> Result<Json<QueryHistoryItem>, StatusCode> {
     let sqlite = state.sqlite.clone();
     
-    let item = tokio::task::spawn_blocking(move || {
-        sqlite.call(move |conn| {
+    let item = sqlite.call(move |conn| {
             let mut stmt = conn.prepare(r#"
                 SELECT 
                     query_id,
@@ -205,17 +198,12 @@ pub async fn get_query_detail(
             match result {
                 Ok(item) => Ok(Some(item)),
                 Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-                Err(e) => Err(e),
+                Err(e) => Err(tokio_rusqlite::Error::Rusqlite(e)),
             }
         })
-    })
     .await
     .map_err(|e| {
         error!(error = %e, "Failed to spawn blocking task");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?
-    .map_err(|e| {
-        error!(error = %e, "Failed to get query detail");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
     

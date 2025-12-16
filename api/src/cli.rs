@@ -13,18 +13,18 @@ pub struct CliArguments {
     /// API server listen address
     /// 
     /// Example: 127.0.0.1:8080
-    #[arg(short = 'a', long, env = "API_ADDRESS", default_value = "127.0.0.1:8080")]
+    #[arg(short = 'a', long,  default_value = "127.0.0.1:8080")]
     pub api_address: SocketAddr,
 
     /// Data directory (where RocksDB and SQLite are located)
     /// 
     /// Example: ./data
-    #[arg(short = 'd', long, env = "DATA_DIR", default_value = "./data")]
+    #[arg(short = 'd', long, default_value = "./data")]
     pub data_dir: PathBuf,
 
     /// PostgreSQL URL for analysis queries (optional)
     /// 
     /// Example: postgres://user:password@localhost:5432/postgres
-    #[arg(short = 'p', long, env = "POSTGRES_URL")]
+    #[arg(short = 'p', long, default_value = None)]
     pub postgres_url: Option<String>,
 }

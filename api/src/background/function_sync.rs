@@ -2,7 +2,7 @@ use tokio::time::{interval, Duration};
 use tracing::{error, info};
 
 use crate::state::AppState;
-use crate::services::{FunctionInfo, Volatility};
+use crate::services::function_cache::{FunctionInfo, Volatility};
 
 pub fn start_function_sync(state: AppState) {
     tokio::spawn(async move {

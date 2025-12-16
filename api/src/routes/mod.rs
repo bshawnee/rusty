@@ -1,3 +1,6 @@
+mod history;
+mod live;
+
 use axum::{
     Router,
     routing::get,

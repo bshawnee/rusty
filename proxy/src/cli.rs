@@ -12,12 +12,12 @@ pub struct CliArguments {
     /// PostgreSQL server address (upstream)
     /// 
     /// Example: localhost:5432
-    #[arg(short = 'u', long, env = "PROXY_UPSTREAM")]
+    #[arg(short = 'u', long)]
     pub upstream: SocketAddr,
 
     /// Proxy listen address (downstream)
     /// 
     /// Example: localhost:5433
-    #[arg(short = 'd', long, env = "PROXY_DOWNSTREAM")]
+    #[arg(short = 'd', long)]
     pub downstream: SocketAddr,
 }
