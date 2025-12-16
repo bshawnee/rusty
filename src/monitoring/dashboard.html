@@ -543,6 +543,79 @@
     overflow-x: auto;
 }
 
+.modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+}
+
+.modal.hidden {
+    display: none;
+}
+
+.modal-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(2px);
+}
+
+.modal-content {
+    position: relative;
+    margin: 60px auto;
+    max-width: 900px;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+    overflow: hidden;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 18px;
+    border-bottom: 1px solid #21262d;
+    background: #161b22;
+}
+
+.modal-header h2 {
+    font-size: 16px;
+    color: #79c0ff;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: #8b949e;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.modal-close:hover {
+    color: #f85149;
+}
+
+.modal-body {
+    padding: 16px;
+    font-size: 12px;
+}
+
+.modal-loading {
+    text-align: center;
+    color: #8b949e;
+}
+
+.blocker-actions {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed rgba(138, 180, 248, 0.25);
+    display: flex;
+    justify-content: flex-end;
+}
+
+
     </style>
 </head>
 <body>
@@ -762,31 +835,44 @@ async function showBlocking(queryId, card) {
                 </div>
             `).join('');
             
-            return `
-                <div class="blocker-detail">
-                    <div class="blocker-header">
-                        <strong>🚫 Blocked by PID ${blocker.blocking_pid}</strong>
-                        <span class="blocker-duration">${blocker.blocking_duration.toFixed(1)}s</span>
-                    </div>
-                    <div class="blocker-info">
-                        <span>👤 ${escapeHtml(blocker.blocking_user)}</span>
-                        <span class="blocker-state">${escapeHtml(blocker.blocking_state)}</span>
-                        ${blocker.blocking_application ? 
-                            `<span>📱 ${escapeHtml(blocker.blocking_application)}</span>` : 
-                            ''}
-                        ${blocker.blocking_client_addr ? 
-                            `<span>📡 ${escapeHtml(blocker.blocking_client_addr)}</span>` : 
-                            ''}
-                    </div>
-                    <div class="blocker-query">${escapeHtml(blocker.blocking_query)}</div>
-                    ${heldLocks ? `
-                        <div class="locks-section">
-                            <div class="locks-header">🔒 Holding locks:</div>
-                            ${heldLocks}
-                        </div>
-                    ` : ''}
+           return `
+            <div class="blocker-detail">
+                <div class="blocker-header">
+                    <strong>🚫 Blocked by PID ${blocker.blocking_pid}</strong>
+                    <span class="blocker-duration">${blocker.blocking_duration.toFixed(1)}s</span>
                 </div>
-            `;
+            
+                <div class="blocker-info">
+                    <span>👤 ${escapeHtml(blocker.blocking_user)}</span>
+                    <span class="blocker-state">${escapeHtml(blocker.blocking_state)}</span>
+                    ${blocker.blocking_application ? 
+                        `<span>📱 ${escapeHtml(blocker.blocking_application)}</span>` : 
+                        ''}
+                    ${blocker.blocking_client_addr ? 
+                        `<span>📡 ${escapeHtml(blocker.blocking_client_addr)}</span>` : 
+                        ''}
+                </div>
+            
+                <div class="blocker-query">
+                    ${escapeHtml(blocker.blocking_query)}
+                </div>
+            
+                ${heldLocks ? `
+                    <div class="locks-section">
+                        <div class="locks-header">🔒 Holding locks:</div>
+                        ${heldLocks}
+                    </div>
+                ` : ''}
+                
+                <!-- ✅ actions -->
+                <div class="blocker-actions">
+                    <button class="btn-blocking"
+                        onclick="showTransaction(${queryId}, ${blocker.blocking_pid})">
+                        📜 Transaction
+                    </button>
+                </div>
+            </div>
+        `;
         }).join('');
         
         blockingPanel.innerHTML = `
@@ -814,6 +900,72 @@ async function showBlocking(queryId, card) {
         `;
     }
 }
+
+async function showTransaction(queryId, blockerPid) {
+    const modal = document.getElementById('transaction-modal');
+    const body = document.getElementById('transaction-body');
+
+    modal.classList.remove('hidden');
+    body.innerHTML = '<div class="modal-loading">⏳ Loading transaction...</div>';
+
+    try {
+        const res = await fetch(
+            `/api/query/${queryId}/blocker/${blockerPid}/transaction`
+        );
+        const data = await res.json();
+
+        body.innerHTML = `
+            <div class="blocked-query-detail">
+                <div class="blocked-header">
+                    <strong>PID ${data.backend_pid}</strong>
+                    <span>${data.transaction_duration.toFixed(1)}s</span>
+                </div>
+
+                <div class="blocked-meta">
+                    <span>👤 ${escapeHtml(data.blocking_user)}</span>
+                    <span class="wait-event">${escapeHtml(data.blocking_state)}</span>
+                    ${data.application_name ? `<span>📱 ${escapeHtml(data.application_name)}</span>` : ''}
+                    ${data.client_addr ? `<span>📡 ${escapeHtml(data.client_addr)}</span>` : ''}
+                </div>
+
+                <div class="locks-section">
+                    <div class="locks-header">📊 Transaction stats</div>
+                    <div class="lock-item held">
+                        <span>Total queries:</span>
+                        <strong>${data.total_queries}</strong>
+                    </div>
+                </div>
+
+                ${data.current_query ? `
+                    <div class="locks-section">
+                        <div class="locks-header">▶ Current query</div>
+                        <pre class="blocked-sql">${escapeHtml(data.current_query)}</pre>
+                    </div>
+                ` : ''}
+
+                ${data.recent_queries?.length ? `
+                    <div class="locks-section">
+                        <div class="locks-header">🕘 Recent queries</div>
+                        ${data.recent_queries.map(q => `
+                    <pre class="blocked-sql">
+                        [${q.status}] (${q.execution_time_ms.toFixed(1)} ms) ${escapeHtml(q.query_text)}
+                    </pre>
+                `).join('')}
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    } catch (e) {
+        body.innerHTML = `
+            <div class="blocking-error">
+                ❌ Failed to load transaction: ${e.message}
+            </div>
+        `;
+    }
+}
+
+
+
     function updateQueryCard(card, q) {
         const elapsed = q.elapsed_seconds;
         const level = getLevel(elapsed);
@@ -921,6 +1073,39 @@ async function showBlocking(queryId, card) {
     }
     
     connect();
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const modal = document.getElementById('transaction-modal');
+        const closeBtn = modal.querySelector('.modal-close');
+        const overlay = modal.querySelector('.modal-overlay');
+
+        function closeModal() {
+            modal.classList.add('hidden');
+        }
+
+        closeBtn.onclick = closeModal;
+        overlay.onclick = closeModal;
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            document.getElementById('transaction-modal')
+                ?.classList.add('hidden');
+        }
+    });
+
 </script>
+<div id="transaction-modal" class="modal hidden">
+    <div class="modal-overlay"></div>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>📜 Blocking Transaction</h2>
+            <button class="modal-close">✕</button>
+        </div>
+        <div class="modal-body" id="transaction-body">
+            <div class="modal-loading">⏳ Loading transaction...</div>
+        </div>
+    </div>
+</div>
 </body>
 </html>

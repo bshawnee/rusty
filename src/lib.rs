@@ -1,14 +1,11 @@
 pub mod cli;
+pub mod proxy;
+pub mod protocol;
+pub mod monitoring;
+pub mod database;
+pub mod utils;
 
-#[derive(Debug, Clone)]
-pub enum TrafficDirection {
-    ClientToServer,
-    ServerToClient,
-}
-
-#[derive(Debug)]
-pub struct TrafficData {
-    pub direction: TrafficDirection,
-    pub client_addr: std::net::SocketAddr,
-    pub data: Vec<u8>,
-}
+// Реэкспорт основных типов для удобства
+pub use protocol::{TrafficDirection, TrafficData};
+pub use proxy::start_proxy_server;
+pub use monitoring::ActiveQueries;
