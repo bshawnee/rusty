@@ -642,7 +642,12 @@
         <div class="no-queries">Waiting for queries...</div>
     </div>
 
- <script>
+<script>
+    // Configuration
+    const API_BASE = window.location.origin;
+    const WS_URL = `ws://${window.location.host}/api/live/stream`;
+
+    // DOM elements
     const statusEl = document.getElementById('status');
     const queriesEl = document.getElementById('queries');
     const activeCountEl = document.getElementById('active-count');
@@ -650,39 +655,7 @@
     
     let ws;
 
-    async function cancelQuery(queryId, button) {
-        if (button.disabled) {
-            return;
-        }
-        
-        // ✅ Убрали confirm() - он блокирует рендер!
-        button.disabled = true;
-        button.textContent = '⏳ Cancelling...';
-        
-        try {
-            const response = await fetch(`/api/query/${queryId}/cancel`, {
-                method: 'POST',
-            });
-            
-            const result = await response.json();
-            
-            if (result.success) {
-                console.log(`Query ${queryId} cancelled:`, result.message);
-                showNotification('success', result.message);
-                button.textContent = '✓ Cancelled';
-            } else {
-                console.error(`Failed to cancel query ${queryId}:`, result.message);
-                showNotification('error', result.message);
-                button.textContent = '✕ Failed';
-                button.disabled = false;
-            }
-        } catch (error) {
-            console.error('Cancel request failed:', error);
-            showNotification('error', 'Network error');
-            button.textContent = '✕ Cancel';
-            button.disabled = false;
-        }
-    }
+    // ==================== Notifications ====================
     
     function showNotification(type, message) {
         const toast = document.createElement('div');
@@ -708,6 +681,8 @@
         }, 3000);
     }
 
+    // ==================== Query Card Rendering ====================
+
     function getLevel(elapsed) {
         if (elapsed < 1) return 0;
         if (elapsed < 2) return 1;
@@ -716,258 +691,53 @@
         if (elapsed < 30) return 4;
         return 5;
     }
-function createQueryCard(q) {
-    const elapsed = q.elapsed_seconds;
-    const level = getLevel(elapsed);
-    
-    const card = document.createElement('div');
-    card.className = `query-card level-${level}`;
-    card.dataset.queryId = q.query_id;
-    
-    const header = document.createElement('div');
-    header.className = 'query-header';
-    
-    const meta = document.createElement('div');
-    meta.className = 'query-meta';
-    meta.innerHTML = `
-        <span class="query-meta-item">👤 ${escapeHtml(q.user)}@${escapeHtml(q.database)}</span>
-        <span class="query-meta-item">📱 ${escapeHtml(q.application_name)}</span>
-        <span class="query-meta-item">📡 ${escapeHtml(q.client_addr)}</span>
-    `;
-    
-    const actions = document.createElement('div');
-    actions.style.cssText = 'display: flex; align-items: center; gap: 12px;';
-    
-    const timeEl = document.createElement('div');
-    timeEl.className = 'query-time';
-    timeEl.textContent = `${elapsed.toFixed(2)}s`;
-    
-    // ✅ Кнопка "Show Blocking"
-    const blockingButton = document.createElement('button');
-    blockingButton.className = 'btn-blocking';
-    blockingButton.textContent = '🔒 Blocked';
-    blockingButton.addEventListener('click', function(e) {
-        e.stopPropagation();
-        showBlocking(q.query_id, card);
-    });
-    
-    // Cancel button
-    const cancelButton = document.createElement('button');
-    cancelButton.className = 'btn-cancel';
-    cancelButton.textContent = '✕ Cancel';
-    cancelButton.addEventListener('click', function(e) {
-        e.stopPropagation();
-        cancelQuery(q.query_id, this);
-    });
-    
-    actions.appendChild(timeEl);
-    actions.appendChild(blockingButton);  // ✅ Добавили
-    actions.appendChild(cancelButton);
-    
-    header.appendChild(meta);
-    header.appendChild(actions);
-    
-    const sql = document.createElement('div');
-    sql.className = 'query-sql';
-    sql.textContent = q.query;
-    
-    card.appendChild(header);
-    card.appendChild(sql);
-    
-    return card;
-}
 
-async function showBlocking(queryId, card) {
-    let blockingPanel = card.querySelector('.blocking-panel');
-    
-    if (blockingPanel) {
-        blockingPanel.style.display = 
-            blockingPanel.style.display === 'none' ? 'block' : 'none';
-        return;
+    function createQueryCard(q) {
+        // Вычисляем elapsed из start_time_us
+        const now_us = Date.now() * 1000; // Текущее время в микросекундах
+        const elapsed = (now_us - q.start_time_us) / 1_000_000; // Секунды
+        const level = getLevel(elapsed);
+        
+        const card = document.createElement('div');
+        card.className = `query-card level-${level}`;
+        card.dataset.queryId = q.query_id;
+        
+        const header = document.createElement('div');
+        header.className = 'query-header';
+        
+        const meta = document.createElement('div');
+        meta.className = 'query-meta';
+        meta.innerHTML = `
+            <span class="query-meta-item">👤 ${escapeHtml(q.user)}@${escapeHtml(q.database)}</span>
+            <span class="query-meta-item">📱 ${escapeHtml(q.application_name)}</span>
+            <span class="query-meta-item">📡 ${escapeHtml(q.client_addr)}</span>
+        `;
+        
+        const actions = document.createElement('div');
+        actions.style.cssText = 'display: flex; align-items: center; gap: 12px;';
+        
+        const timeEl = document.createElement('div');
+        timeEl.className = 'query-time';
+        timeEl.textContent = `${elapsed.toFixed(2)}s`;
+        
+        actions.appendChild(timeEl);
+        
+        header.appendChild(meta);
+        header.appendChild(actions);
+        
+        const sql = document.createElement('div');
+        sql.className = 'query-sql';
+        sql.textContent = q.query;
+        
+        card.appendChild(header);
+        card.appendChild(sql);
+        
+        return card;
     }
-    
-    blockingPanel = document.createElement('div');
-    blockingPanel.className = 'blocking-panel';
-    blockingPanel.innerHTML = '<div class="blocking-loading">⏳ Loading blocking info...</div>';
-    card.appendChild(blockingPanel);
-    
-    try {
-        const response = await fetch(`/api/query/${queryId}/blocking`);
-        const data = await response.json();
-        
-        console.log('Blocking data:', data);  // ✅ Для отладки
-        
-        // ✅ Проверяем что data.blockers существует
-        if (!data.blockers || data.blockers.length === 0) {
-            blockingPanel.innerHTML = `
-                <div class="blocking-empty">
-                    ✅ Not blocked by any queries
-                    ${data.current_process && data.current_process.wait_event ? 
-                        `<div class="wait-info">⏸️ Waiting on: ${escapeHtml(data.current_process.wait_event)}</div>` : 
-                        ''}
-                </div>
-            `;
-            return;
-        }
-        
-        // ✅ Показываем waiting locks
-        const waitingLocksList = (data.waiting_locks || []).map(lock => `
-            <div class="lock-item waiting">
-                <span class="lock-icon">⏳</span>
-                <span class="lock-mode">${escapeHtml(lock.lock_mode)}</span>
-                <span class="lock-type">on ${escapeHtml(lock.lock_type)}</span>
-                ${lock.object_name ? 
-                    `<span class="lock-object">"${escapeHtml(lock.object_name)}" (${escapeHtml(lock.object_type)})</span>` : 
-                    ''}
-            </div>
-        `).join('');
-        
-        // ✅ Показываем кто блокирует
-        const blockersList = data.blockers.map(blocker => {
-            const heldLocks = (blocker.held_locks || []).map(lock => `
-                <div class="lock-item held">
-                    <span class="lock-icon">🔒</span>
-                    <span class="lock-mode">${escapeHtml(lock.lock_mode)}</span>
-                    <span class="lock-type">on ${escapeHtml(lock.lock_type)}</span>
-                    ${lock.object_name ? 
-                        `<span class="lock-object">"${escapeHtml(lock.object_name)}" (${escapeHtml(lock.object_type)})</span>` : 
-                        ''}
-                </div>
-            `).join('');
-            
-           return `
-            <div class="blocker-detail">
-                <div class="blocker-header">
-                    <strong>🚫 Blocked by PID ${blocker.blocking_pid}</strong>
-                    <span class="blocker-duration">${blocker.blocking_duration.toFixed(1)}s</span>
-                </div>
-            
-                <div class="blocker-info">
-                    <span>👤 ${escapeHtml(blocker.blocking_user)}</span>
-                    <span class="blocker-state">${escapeHtml(blocker.blocking_state)}</span>
-                    ${blocker.blocking_application ? 
-                        `<span>📱 ${escapeHtml(blocker.blocking_application)}</span>` : 
-                        ''}
-                    ${blocker.blocking_client_addr ? 
-                        `<span>📡 ${escapeHtml(blocker.blocking_client_addr)}</span>` : 
-                        ''}
-                </div>
-            
-                <div class="blocker-query">
-                    ${escapeHtml(blocker.blocking_query)}
-                </div>
-            
-                ${heldLocks ? `
-                    <div class="locks-section">
-                        <div class="locks-header">🔒 Holding locks:</div>
-                        ${heldLocks}
-                    </div>
-                ` : ''}
-                
-                <!-- ✅ actions -->
-                <div class="blocker-actions">
-                    <button class="btn-blocking"
-                        onclick="showTransaction(${queryId}, ${blocker.blocking_pid})">
-                        📜 Transaction
-                    </button>
-                </div>
-            </div>
-        `;
-        }).join('');
-        
-        blockingPanel.innerHTML = `
-            <div class="blocking-header">
-                ⚠️ This query is blocked by ${data.blockers.length} ${data.blockers.length === 1 ? 'process' : 'processes'}
-            </div>
-            
-            ${waitingLocksList ? `
-                <div class="locks-section">
-                    <div class="locks-header">⏳ Waiting for locks:</div>
-                    ${waitingLocksList}
-                </div>
-            ` : ''}
-            
-            <div class="blockers-list">
-                ${blockersList}
-            </div>
-        `;
-    } catch (error) {
-        console.error('Failed to load blocking info:', error);
-        blockingPanel.innerHTML = `
-            <div class="blocking-error">
-                ❌ Failed to load blocking info: ${error.message}
-            </div>
-        `;
-    }
-}
-
-async function showTransaction(queryId, blockerPid) {
-    const modal = document.getElementById('transaction-modal');
-    const body = document.getElementById('transaction-body');
-
-    modal.classList.remove('hidden');
-    body.innerHTML = '<div class="modal-loading">⏳ Loading transaction...</div>';
-
-    try {
-        const res = await fetch(
-            `/api/query/${queryId}/blocker/${blockerPid}/transaction`
-        );
-        const data = await res.json();
-
-        body.innerHTML = `
-            <div class="blocked-query-detail">
-                <div class="blocked-header">
-                    <strong>PID ${data.backend_pid}</strong>
-                    <span>${data.transaction_duration.toFixed(1)}s</span>
-                </div>
-
-                <div class="blocked-meta">
-                    <span>👤 ${escapeHtml(data.blocking_user)}</span>
-                    <span class="wait-event">${escapeHtml(data.blocking_state)}</span>
-                    ${data.application_name ? `<span>📱 ${escapeHtml(data.application_name)}</span>` : ''}
-                    ${data.client_addr ? `<span>📡 ${escapeHtml(data.client_addr)}</span>` : ''}
-                </div>
-
-                <div class="locks-section">
-                    <div class="locks-header">📊 Transaction stats</div>
-                    <div class="lock-item held">
-                        <span>Total queries:</span>
-                        <strong>${data.total_queries}</strong>
-                    </div>
-                </div>
-
-                ${data.current_query ? `
-                    <div class="locks-section">
-                        <div class="locks-header">▶ Current query</div>
-                        <pre class="blocked-sql">${escapeHtml(data.current_query)}</pre>
-                    </div>
-                ` : ''}
-
-                ${data.recent_queries?.length ? `
-                    <div class="locks-section">
-                        <div class="locks-header">🕘 Recent queries</div>
-                        ${data.recent_queries.map(q => `
-                    <pre class="blocked-sql">
-                        [${q.status}] (${q.execution_time_ms.toFixed(1)} ms) ${escapeHtml(q.query_text)}
-                    </pre>
-                `).join('')}
-                    </div>
-                ` : ''}
-            </div>
-        `;
-    } catch (e) {
-        body.innerHTML = `
-            <div class="blocking-error">
-                ❌ Failed to load transaction: ${e.message}
-            </div>
-        `;
-    }
-}
-
-
 
     function updateQueryCard(card, q) {
-        const elapsed = q.elapsed_seconds;
+        const now_us = Date.now() * 1000;
+        const elapsed = (now_us - q.start_time_us) / 1_000_000;
         const level = getLevel(elapsed);
         
         const currentLevel = Array.from(card.classList)
@@ -975,7 +745,9 @@ async function showTransaction(queryId, blockerPid) {
         const newLevelClass = `level-${level}`;
         
         if (currentLevel !== newLevelClass) {
-            card.classList.remove(currentLevel);
+            if (currentLevel) {
+                card.classList.remove(currentLevel);
+            }
             card.classList.add(newLevelClass);
         }
         
@@ -986,26 +758,36 @@ async function showTransaction(queryId, blockerPid) {
     }
 
     function updateQueries(queries) {
+        console.log('updateQueries called with', queries.length, 'queries');
+        
         if (queries.length === 0) {
-            // ✅ ИСПРАВЛЕНО: Проверяем есть ли уже no-queries
             const noQueriesEl = queriesEl.querySelector('.no-queries');
             if (!noQueriesEl) {
-                // Удаляем все карточки
                 queriesEl.innerHTML = '';
-                // Создаем no-queries через DOM
                 const noQueries = document.createElement('div');
                 noQueries.className = 'no-queries';
                 noQueries.textContent = 'No running queries';
                 queriesEl.appendChild(noQueries);
             }
+            activeCountEl.textContent = '0';
+            longestTimeEl.textContent = '0.0s';
             return;
         }
         
-        // ✅ ИСПРАВЛЕНО: Удаляем no-queries если есть
+        // Удаляем no-queries если есть
         const noQueriesEl = queriesEl.querySelector('.no-queries');
         if (noQueriesEl) {
             noQueriesEl.remove();
         }
+        
+        // Обновляем статистику
+        activeCountEl.textContent = queries.length;
+        
+        const now_us = Date.now() * 1000;
+        const longest = Math.max(...queries.map(q => {
+            return (now_us - q.start_time_us) / 1_000_000;
+        }));
+        longestTimeEl.textContent = longest.toFixed(1) + 's';
         
         const currentIds = new Set(queries.map(q => q.query_id));
         
@@ -1031,8 +813,11 @@ async function showTransaction(queryId, blockerPid) {
         });
     }
 
+    // ==================== WebSocket ====================
+
     function connect() {
-        ws = new WebSocket('ws://localhost:8080/api/stats/live');
+        console.log('Connecting to WebSocket:', WS_URL);
+        ws = new WebSocket(WS_URL);
 
         ws.onopen = () => {
             console.log('WebSocket connected');
@@ -1052,48 +837,67 @@ async function showTransaction(queryId, blockerPid) {
         };
         
         ws.onmessage = (event) => {
-            const queries = JSON.parse(event.data);
+            console.log('WebSocket message received');
             
-            activeCountEl.textContent = queries.length;
-            if (queries.length > 0) {
-                const longest = Math.max(...queries.map(q => q.elapsed_seconds));
-                longestTimeEl.textContent = longest.toFixed(1) + 's';
-            } else {
-                longestTimeEl.textContent = '0.0s';
+            try {
+                const data = JSON.parse(event.data);
+                console.log('Parsed data:', data);
+                
+                // Проверяем что это массив queries
+                if (Array.isArray(data)) {
+                    // Проверяем что это queries (у них есть query_id)
+                    if (data.length === 0 || data[0].query_id !== undefined) {
+                        updateQueries(data);
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to parse WebSocket message:', e);
             }
-            
-            updateQueries(queries);
         };
     }
 
+    // ==================== Utilities ====================
+
     function escapeHtml(text) {
+        if (!text) return '';
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
     }
     
+    // ==================== Initialization ====================
+    
+    console.log('Dashboard starting...');
+    console.log('API_BASE:', API_BASE);
+    console.log('WS_URL:', WS_URL);
+    
+    // Запускаем WebSocket
     connect();
-
-    document.addEventListener('DOMContentLoaded', () => {
-        const modal = document.getElementById('transaction-modal');
-        const closeBtn = modal.querySelector('.modal-close');
-        const overlay = modal.querySelector('.modal-overlay');
-
-        function closeModal() {
-            modal.classList.add('hidden');
+    
+    // HTTP fallback - на случай если WebSocket не работает
+    async function fetchQueries() {
+        try {
+            const response = await fetch(`${API_BASE}/api/live/queries`);
+            const data = await response.json();
+            console.log('HTTP fetch result:', data);
+            if (data.queries) {
+                updateQueries(data.queries);
+            }
+        } catch (e) {
+            console.error('Failed to fetch queries via HTTP:', e);
         }
-
-        closeBtn.onclick = closeModal;
-        overlay.onclick = closeModal;
-    });
-
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            document.getElementById('transaction-modal')
-                ?.classList.add('hidden');
+    }
+    
+    // Опрашиваем HTTP каждые 2 секунды если WebSocket не подключен
+    setInterval(() => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            console.log('WebSocket not connected, falling back to HTTP');
+            fetchQueries();
         }
-    });
-
+    }, 2000);
+    
+    // Первый запрос сразу при загрузке
+    fetchQueries();
 </script>
 <div id="transaction-modal" class="modal hidden">
     <div class="modal-overlay"></div>

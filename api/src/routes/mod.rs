@@ -24,7 +24,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/history/:query_id", get(history::get_query_detail))
         
         // Static files (dashboard)
-        .nest_service("/", ServeDir::new("static"))
+        .fallback_service(ServeDir::new("api/static"))
         
         // CORS
         .layer(CorsLayer::permissive())
